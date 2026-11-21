@@ -1,0 +1,1376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PhotoMap</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.5.2/ol.css">
+<script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+<style>
+:root{font:14px system-ui,sans-serif;color:#222}*{box-sizing:border-box}body{margin:0;height:100dvh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,255px);grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+header{grid-column:1;grid-row:1;min-width:0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;min-height:58px;background:white}
+button{font:inherit;cursor:pointer;border:1px solid #bbb;background:#fff;border-radius:6px;padding:7px 12px}
+button:hover{background:#f0f0f0}button:disabled{opacity:.5;cursor:wait}
+#recentFolders{font:inherit;max-width:200px;padding:7px 8px;border:1px solid #bbb;border-radius:6px;background:white}#recentFolders[hidden],#restorePrompt[hidden],#choosePrompt[hidden]{display:none}
+#restorePrompt,#choosePrompt{position:relative;display:inline-flex;align-items:center;flex:none}
+#restoreLast{display:inline-flex;align-items:center;gap:8px;border:1px solid #1459b8;background:#1769d2;color:#fff;font-weight:700;padding:9px 15px;box-shadow:0 2px 8px #1769d244;white-space:nowrap}
+#restoreLast:hover{background:#1259b5}
+#restoreLast:focus-visible{outline:3px solid #80b8ff;outline-offset:3px}
+#restoreLast:disabled{opacity:.7;cursor:wait}
+#restoreLast svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#restoreBubble,#chooseBubble{position:absolute;z-index:110;top:calc(100% + 13px);left:50%;transform:translateX(-50%);width:max-content;max-width:min(320px,85vw);padding:11px 14px;border-radius:9px;background:#202937;color:#fff;box-shadow:0 6px 25px #0005;font-size:13px;line-height:1.45;white-space:normal;pointer-events:none}
+#restoreBubble::before,#chooseBubble::before{content:"";position:absolute;bottom:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-bottom-color:#202937}
+#chooseBubble{left:0;transform:none}
+#chooseBubble::before{left:75px;transform:translateX(-50%)}
+#restoreBubble strong,#chooseBubble strong{display:block;overflow-wrap:anywhere;font-weight:650}
+#restoreBubble span,#chooseBubble span{display:block;color:#dae4f3;margin-top:3px}
+@media(max-width:650px){#restoreBubble{left:0;transform:none}#restoreBubble::before,#chooseBubble::before{left:25px;transform:none}}
+#concurrency,#thumbSize,#thumbQuality{font:inherit;padding:7px 8px;border:1px solid #bbb;border-radius:6px;background:white}label[for="concurrency"],label[for="thumbSize"],label[for="thumbQuality"]{white-space:nowrap}
+#status{color:#555;flex:1;min-width:190px}
+#workspace{display:contents}
+#map{grid-column:1;grid-row:2;min-width:0;min-height:0;width:100%;height:100%}
+#folders{grid-column:2;grid-row:1 / 3;width:100%;min-width:0;border-left:1px solid #ddd;background:#fafafa;display:flex;flex-direction:column;min-height:0}
+#folderTitle{padding:8px 12px;min-height:58px;font-weight:650;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;gap:8px}
+#folderTitleLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#folderList{overflow:auto;flex:1;padding:6px}
+.folder-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;border:0;background:transparent;border-radius:5px;width:100%;padding:8px;min-height:38px}
+/* Folder scan states: pending / processing / completed. */
+.folder-btn.pending{color:#9299a4;background:#f0f1f3}
+.folder-btn.pending .folder-count{color:#a4aab2}
+.folder-btn.processing{color:#155eac;background:#e8f1fe}
+.folder-btn.processing .folder-count{color:#3775b3}
+.folder-btn:hover{background:#e8edf3}
+.folder-btn.active{background:#dce9fd;color:#174b94;font-weight:600}
+.folder-btn.active.pending{background:#e9ecf1;color:#737e8c}
+.folder-btn.active.processing{background:#d8eafe;color:#174b94}
+.folder-btn .folder-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.folder-btn .folder-count{font-size:12px;color:#666;flex:none;font-variant-numeric:tabular-nums}
+.folder-entry{margin-bottom:2px}
+.folder-progress{margin:0 9px 7px;height:5px;border-radius:999px;background:#dce3ec;overflow:hidden}
+.folder-progress-fill{height:100%;width:0;background:#3984e6;border-radius:inherit;transition:width .12s ease}
+.folder-progress-label{padding:0 9px 4px;font-size:11px;color:#526477;font-variant-numeric:tabular-nums}
+.folder-progress[hidden],.folder-progress-label[hidden]{display:none}
+#folderHint{font-size:12px;color:#666;padding:10px;border-top:1px solid #ddd}
+
+.popup{background:white;border-radius:10px;padding:10px;box-shadow:0 4px 18px #0005;text-align:center;min-width:120px}
+.popup img{display:block;max-width:320px;max-height:320px;object-fit:contain;cursor:zoom-in;margin:auto}
+.popup .date{margin-top:6px;color:#444}
+.popup{position:relative;min-width:180px;max-width:min(370px,90vw)}
+.popup-main{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}
+.popup-main img{max-width:min(300px,65vw);max-height:320px;min-width:0}
+.popup-arrow{font-size:26px;line-height:1;padding:3px 9px;flex:none}
+.popup-close{position:absolute;right:4px;top:3px;border:0;background:transparent;font-size:22px;line-height:1;padding:3px 7px;color:#444}
+.popup .date{padding:0 8px;overflow-wrap:anywhere;font-size:13px;line-height:1.35}
+.popup-count{font-size:12px;color:#777;margin-top:4px}
+.popup-footer{margin-top:9px;display:flex;flex-direction:column;align-items:center;gap:2px}
+#viewer{position:fixed;inset:0;background:#000e;z-index:1000;display:none;align-items:center;justify-content:center;color:white}
+#viewer.visible{display:flex}
+#viewerStage{position:relative;display:flex;align-items:center;justify-content:center;width:calc(100vw - 105px);height:calc(100dvh - 100px);min-height:100px}
+#viewerStage .viewer-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;cursor:zoom-out;opacity:0;visibility:hidden;transition:opacity .26s ease;pointer-events:none}
+#viewerStage .viewer-photo.active{opacity:1;visibility:visible;pointer-events:auto}
+#viewerStage .viewer-photo.fading-out{opacity:0;visibility:visible;pointer-events:none}
+@media(prefers-reduced-motion:reduce){#viewerStage .viewer-photo{transition:none}}
+#viewerCaption{position:absolute;bottom:12px;left:62px;right:62px;text-align:center;pointer-events:none}
+#viewerLoading{z-index:1;position:absolute;inset:0;display:flex;justify-content:center;align-items:center;pointer-events:none;background:#0003}
+#viewerLoading[hidden],#viewerError[hidden]{display:none}
+.spinner{width:48px;height:48px;border-radius:50%;border:5px solid #ffffff57;border-top-color:#fff;animation:spin .8s linear infinite;filter:drop-shadow(0 2px 5px #0008)}
+@keyframes spin{to{transform:rotate(360deg)}}
+#viewerError{position:absolute;max-width:min(480px,75vw);padding:16px;border-radius:8px;background:#242424e8;text-align:center;overflow-wrap:anywhere}
+.vbtn{position:absolute;color:white;background:#333a;border:1px solid #7778;border-radius:8px;padding:6px 13px;font-size:32px;line-height:1.1;z-index:2}
+.vbtn:hover{background:#555d}.vbtn:disabled{opacity:.3}.prev{left:12px;top:50%;transform:translateY(-50%)}.next{right:12px;top:50%;transform:translateY(-50%)}
+#download{top:15px;right:76px;width:45px;height:43px;padding:7px;display:flex;align-items:center;justify-content:center}
+#download svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.close{top:15px;right:18px;font-size:27px}
+@media(max-width:650px){body{grid-template-columns:minmax(0,1fr) 145px}header{min-height:unset}#folders{width:100%}.folder-btn{padding:7px 4px}#viewerStage{width:calc(100vw - 72px);height:calc(100dvh - 100px)}.vbtn{padding:4px 8px;font-size:25px}.prev{left:4px}.next{right:4px}}
+#deletePhoto{top:15px;right:76px;width:45px;height:43px;padding:7px;display:flex;align-items:center;justify-content:center}
+#deletePhoto svg,.popup-delete svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#download{right:134px}
+.popup-delete{position:absolute;right:39px;top:3px;border:0;background:transparent;padding:4px 6px;display:flex;align-items:center;justify-content:center;color:#a93232}
+.popup-delete:hover{background:#ffebeb}
+#deletePhoto[hidden],.popup-delete[hidden]{display:none!important}
+body:not(.local-mode) #deletePhoto{display:none}
+#controlsToggle{display:none;flex:none;width:36px;height:36px;padding:7px;background:#fff;box-shadow:none;border:1px solid #bbb;border-radius:6px}
+#controlsToggle svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+body.http-mode #controlsToggle{display:flex;align-items:center;justify-content:center}
+body.controls-collapsed header{display:none}
+body.controls-collapsed{grid-template-rows:0 minmax(0,1fr)}
+#galleryTitle{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+</style>
+</head>
+<body>
+<header>
+<span id="galleryTitle" aria-label="Gallery title" hidden></span>
+<div id="choosePrompt">
+  <button id="choose" type="button" aria-describedby="chooseBubble">Choose folder</button>
+  <div id="chooseBubble" role="note" hidden><span>Choose a photo folder to create/open a gallery.</span></div>
+</div>
+<select id="recentFolders" aria-label="Recently opened folders" title="Previously opened local folders" hidden></select>
+<div id="restorePrompt" hidden>
+  <button id="restoreLast" type="button" aria-describedby="restoreBubble"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11V5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8m-3-3 3 3-3 3"/></svg><span>Reopen gallery</span></button>
+  <div id="restoreBubble" role="note"><strong id="restoreBubbleFolder"></strong><span>Click Reopen to grant access to the last gallery.</span></div>
+</div>
+<button id="scan" disabled title="Select a source folder to scan all subfolders, generate thumbnails and compressed JPEG copies">Refresh all photos</button>
+<label for="concurrency">Parallel JPEGs</label><select id="concurrency" title="Number of JPEG Web Workers"></select><label for="thumbSize">Thumbnail size</label><select id="thumbSize" title="Thumbnail longest side in pixels"><option value="258">258 px</option><option value="320">320 px</option><option value="384" selected>384 px</option><option value="512">512 px</option></select><label for="thumbQuality">JPEG quality</label><select id="thumbQuality" title="Thumbnail JPEG encoding quality"><option value="30">30%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="60">60%</option><option value="70">70%</option><option value="80">80%</option></select><label for="benchmark"><input type="checkbox" id="benchmark"> Re-encode (benchmark)</label>
+<span id="status" role="status">Loading gallery…</span>
+</header>
+<div id="workspace"><div id="map"></div><aside id="folders" aria-label="Photo folders"><div id="folderTitle"><span id="folderTitleLabel">Folders</span><button id="controlsToggle" type="button" aria-label="Hide controls" aria-expanded="true" title="Hide controls"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg></button></div><nav id="folderList" aria-label="Choose folder"></nav><div id="folderHint">All folders are indexed; only the selected folder is rendered</div></aside></div>
+<div id="viewer" role="dialog" aria-modal="true" aria-label="Photo viewer">
+<button class="vbtn" id="download" aria-label="Download photo" title="Download photo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button>
+<button class="vbtn" id="deletePhoto" aria-label="Delete photo from gallery" title="Delete photo from gallery"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></svg></button>
+<button class="vbtn close" id="close" aria-label="Close" title="Close">×</button>
+<button class="vbtn prev" id="prev" aria-label="Previous photo" title="Previous photo">‹</button>
+<div id="viewerStage">
+  <img id="viewerImage" class="viewer-photo" alt=""><img id="viewerImageNext" class="viewer-photo" alt="">
+  <div id="viewerLoading" hidden><div class="spinner" role="status" aria-label="Loading photo"></div></div>
+  <div id="viewerError" hidden></div>
+</div>
+<button class="vbtn next" id="next" aria-label="Next photo" title="Next photo">›</button>
+<div id="viewerCaption"></div>
+</div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const status=$('status');
+const isHttp=location.protocol==='http:'||location.protocol==='https:';
+if(isHttp)document.body.classList.add('http-mode');
+else if(location.protocol==='file:')document.body.classList.add('local-mode');
+function toggleControls(){
+ const collapsed=document.body.classList.toggle('controls-collapsed');
+ $('controlsToggle').setAttribute('aria-expanded',String(!collapsed));
+ $('controlsToggle').setAttribute('aria-label',collapsed?'Show controls':'Hide controls');
+ $('controlsToggle').title=collapsed?'Show controls':'Hide controls';
+ requestAnimationFrame(()=>map.updateSize());
+}
+$('controlsToggle').onclick=toggleControls;
+function setControlsCollapsed(collapsed){
+ document.body.classList.toggle('controls-collapsed',collapsed);
+ $('controlsToggle').setAttribute('aria-expanded',String(!collapsed));
+ $('controlsToggle').setAttribute('aria-label',collapsed?'Show controls':'Hide controls');
+ $('controlsToggle').title=collapsed?'Show controls':'Hide controls';
+ requestAnimationFrame(()=>map.updateSize());
+}
+
+let galleryName='';
+function setGalleryName(name){
+ galleryName=typeof name==='string'?name.trim():'';
+ $('galleryTitle').textContent=galleryName;
+ $('galleryTitle').hidden=!galleryName;
+ document.title=galleryName?`${galleryName} — PhotoMap`:'PhotoMap';
+}
+const source=new ol.source.Vector();
+const popupEl=document.createElement('div');popupEl.className='popup';
+const popup=new ol.Overlay({element:popupEl,autoPan:{animation:{duration:180}}});
+// When opened from file://, a normal image request cannot provide an HTTP Referer.
+// Identify PhotoMap to the OSM tile service using the X-Requested-With header.
+const osmSource = new ol.source.OSM({
+  referrerPolicy: 'strict-origin-when-cross-origin'
+});
+if (location.protocol === 'file:') {
+  osmSource.setTileLoadFunction((tile, src) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', src, true);
+    xhr.responseType = 'blob';
+    xhr.setRequestHeader('X-Requested-With', 'PhotoMap');
+
+    xhr.onload = () => {
+      if (xhr.status !== 200 || !xhr.response) {
+        console.warn('OSM tile request failed:', xhr.status, src);
+        return;
+      }
+      const objectUrl = URL.createObjectURL(xhr.response);
+      const image = tile.getImage();
+      const release = () => {
+        image.removeEventListener('load', release);
+        image.removeEventListener('error', release);
+        URL.revokeObjectURL(objectUrl);
+      };
+      image.addEventListener('load', release);
+      image.addEventListener('error', release);
+      image.src = objectUrl;
+    };
+    xhr.onerror = () => console.warn('OSM tile network/CORS error:', src);
+    xhr.send();
+  });
+}
+const map=new ol.Map({target:'map',layers:[new ol.layer.Tile({source:osmSource}),new ol.layer.Vector({source})],overlays:[popup],view:new ol.View({center:ol.proj.fromLonLat([0,0]),zoom:2})});
+// gallery.json is the persistent photo index. IndexedDB stores only local directory handles and the most recently used directory.
+let directory=null,items=[],viewerIndex=-1,viewerRequest=0,scanGeneration=0;
+let activeFolder='',activeIndices=[],folderGeneration=0,folderInventory=new Map(),loadingFolder=false;
+let directoryIsExport=false,legacyDirectoryLayout=false;
+let scanInProgress=false;
+// Tombstones are retained in gallery.json so a refresh never reimports
+// a source photo that the user intentionally removed from the gallery.
+const deletedRecords=new Map();
+let indexWriteQueue=Promise.resolve();
+let deleteInProgress=false;
+// During a scan, retain published metadata without rebuilding the currently
+// displayed map for changes in other folders.
+let scanPublished=null, publishedRevision=0, loadedRevision=0;
+function updateScanAvailability(){
+ const available=!!directory && !directoryIsExport && !scanInProgress;
+ $('scan').disabled=!available;
+ $('scan').title=available?'Scan all subfolders, generate thumbnails and compressed JPEG copies':'Select a source folder to refresh photos';
+}
+
+const folderProgress=new Map(); // folder -> {done,total}; only active scanning folders have entries
+const folderProgressElements=new Map();
+const pendingThumbBlobs=new Map();
+const scannedFolders=new Set();
+let scanReady=false;
+let scanStatusKnown=false; // true when inventory has established which folders require processing
+// Only thumbnails for the selected folder are retained as object URLs; all are pre-generated on disk.
+
+const DEFAULT_THUMB_SIZE=384,DEFAULT_THUMB_QUALITY=.50;
+// Pica 10.0.3 runs in the existing JPEG Web Workers (no nested Pica worker pool).
+const THUMB_RESIZER='pica-mks2013-v2';
+const THUMB_RESIZER_FALLBACK='canvas-high-fallback-v2';
+const MARKER_SIZE=86,FADE_MS=260,JPEG_QUALITY=.60;
+// These controls apply when refreshing the gallery; JPEG originals retain quality 60.
+function thumbnailSettings(){
+ return {size:Math.max(1,Number($('thumbSize').value)||DEFAULT_THUMB_SIZE), quality:(Number($('thumbQuality').value)||50)/100};
+}
+// Set the maximum parallel JPEG processing tasks here.
+const MAX_PARALLEL_JPEGS = 4;
+const DEFAULT_PARALLEL_JPEGS = 3;
+function setupConcurrencyOptions(){
+ const select=$('concurrency');
+ select.replaceChildren();
+ for(let n=1;n<=MAX_PARALLEL_JPEGS;n++){
+  const option=document.createElement('option');
+  option.value=String(n);
+  option.textContent=n===1?'1 (baseline)':String(n);
+  select.append(option);
+ }
+ select.value=String(Math.min(DEFAULT_PARALLEL_JPEGS,MAX_PARALLEL_JPEGS));
+}
+setupConcurrencyOptions();
+const EXPORT_DIRECTORY='.photomap';
+// Local file:// directory history. Store structured-cloneable directory handles,
+// never gallery photos or cached image data, in IndexedDB.
+const LOCAL_DB_NAME='PhotoMapLocalFolders';
+const LOCAL_DB_VERSION=1;
+let localDb=null;
+let recentFolderRecords=[];
+let pendingRestoreId=null;
+function openLocalDB(){
+ return new Promise((resolve,reject)=>{
+  const request=indexedDB.open(LOCAL_DB_NAME,LOCAL_DB_VERSION);
+  request.onupgradeneeded=()=>{
+   const db=request.result;
+   if(!db.objectStoreNames.contains('folders'))db.createObjectStore('folders',{keyPath:'id'});
+   if(!db.objectStoreNames.contains('settings'))db.createObjectStore('settings');
+  };
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+ });
+}
+function dbGet(store,key){
+ return new Promise((resolve,reject)=>{
+  const tx=localDb.transaction(store,'readonly');
+  const request=tx.objectStore(store).get(key);
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+ });
+}
+function dbAll(store){
+ return new Promise((resolve,reject)=>{
+  const request=localDb.transaction(store,'readonly').objectStore(store).getAll();
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+ });
+}
+function dbPut(store,value,key){
+ return new Promise((resolve,reject)=>{
+  const tx=localDb.transaction(store,'readwrite');
+  tx.objectStore(store).put(value,key);
+  tx.oncomplete=resolve;
+  tx.onerror=()=>reject(tx.error);
+  tx.onabort=()=>reject(tx.error);
+ });
+}
+async function sameHandle(a,b){
+ try{return await a.isSameEntry(b);}catch{return false;}
+}
+function dbDelete(store,key){
+ return new Promise((resolve,reject)=>{
+  const tx=localDb.transaction(store,'readwrite');
+  tx.objectStore(store).delete(key);
+  tx.oncomplete=resolve;
+  tx.onerror=()=>reject(tx.error);
+  tx.onabort=()=>reject(tx.error);
+ });
+}
+// A source directory (for example, Kailash) already contains its exported
+// .photomap/gallery.json. Do not also retain that same .photomap in Recent folders.
+// Keep a standalone .photomap entry if no known parent has been selected.
+async function removeNestedExportHistory(parentHandle){
+ if(parentHandle.name===EXPORT_DIRECTORY)return;
+ let exportHandle;
+ try{exportHandle=await parentHandle.getDirectoryHandle(EXPORT_DIRECTORY);}
+ catch(e){if(e.name!=='NotFoundError'&&e.name!=='NotAllowedError')console.warn('Could not inspect export folder:',e);return;}
+ for(const entry of recentFolderRecords){
+  if(entry.handle.name!==EXPORT_DIRECTORY)continue;
+  if(await sameHandle(entry.handle,exportHandle)){
+   await dbDelete('folders',entry.id);
+  }
+ }
+}
+async function rememberLocalDirectory(handle){
+ if(location.protocol!=='file:'||!localDb)return;
+ try{
+  let record=null;
+  for(const entry of recentFolderRecords){
+   if(await sameHandle(entry.handle,handle)){record=entry;break;}
+  }
+  const id=record?.id||('folder-'+crypto.randomUUID());
+  const updated={id,name:handle.name,handle,lastOpened:Date.now()};
+  await dbPut('folders',updated);
+  await dbPut('settings',id,'lastFolderId');
+  await removeNestedExportHistory(handle);
+  pendingRestoreId=null;
+  $('restorePrompt').hidden=true;
+  await refreshRecentFolders(id);
+ }catch(e){console.warn('Could not remember local folder:',e);}
+}
+async function refreshRecentFolders(selectedId=null){
+ if(!localDb)return;
+ recentFolderRecords=(await dbAll('folders')).sort((a,b)=>b.lastOpened-a.lastOpened);
+ const select=$('recentFolders');select.replaceChildren();
+ const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Recent folders…';select.append(placeholder);
+ for(const record of recentFolderRecords){
+  const option=document.createElement('option');option.value=record.id;
+  option.textContent=record.name;option.title=record.name;
+  select.append(option);
+ }
+ select.hidden=recentFolderRecords.length===0;
+ select.value=selectedId||'';
+}
+async function openRememberedFolder(record,requestPermission=false){
+ const handle=record.handle;
+ let permission=await handle.queryPermission({mode:'read'});
+ if(permission!=='granted'&&requestPermission){
+  try{
+   permission=await handle.requestPermission({mode:'read'});
+  }catch(e){
+   // Some browsers require a user gesture for a permission request.
+   // Keep the Reopen button available in that case.
+   console.info('Automatic folder permission request unavailable:',e);
+   return false;
+  }
+ }
+ if(permission!=='granted')return false;
+ // Restoring a remembered folder only reads gallery.json; it never silently
+ // rescans sources or requests write access on startup.
+ const previousDirectory=directory;
+ const previousExport=directoryIsExport;
+ const previousLegacy=legacyDirectoryLayout;
+ const previousItems=items;
+ try{
+  directory=handle;directoryIsExport=false;legacyDirectoryLayout=false;
+  if(!await loadIndexFromDirectory(handle)){
+   directory=previousDirectory;directoryIsExport=previousExport;legacyDirectoryLayout=previousLegacy;
+   status.textContent='No gallery.json found in '+handle.name+'. Use Refresh all photos to create one.';
+   return false;
+  }
+  pendingRestoreId=null;
+  $('restorePrompt').hidden=true;
+  status.textContent=`Restored gallery “${handle.name}” from gallery.json.`;
+  await rememberLocalDirectory(handle);
+  return true;
+ }catch(e){
+  directory=previousDirectory;directoryIsExport=previousExport;legacyDirectoryLayout=previousLegacy;
+  status.textContent='Could not restore '+handle.name+': '+e.message;
+  console.warn('Local directory restore:',e);
+  return false;
+ }finally{updateScanAvailability();}
+}
+async function initLocalFolderHistory(){
+ if(!window.indexedDB){status.textContent='IndexedDB is unavailable. Choose a folder manually.';return;}
+ try{
+  localDb=await openLocalDB();
+  await refreshRecentFolders();
+  const lastId=await dbGet('settings','lastFolderId');
+  const record=recentFolderRecords.find(r=>r.id===lastId);
+  if(!record){status.textContent='Choose the photo folder (for example, Kailash) or a standalone .photomap gallery.';return;}
+  const opened=await openRememberedFolder(record,true);
+  if(!opened){
+   pendingRestoreId=record.id;
+   showRestorePrompt(record);
+   status.textContent='Folder access permission required.';
+  }
+ }catch(e){
+  console.warn('Local folder history unavailable:',e);
+  status.textContent='Local folder history unavailable; choose the gallery folder manually.';
+ }
+}
+function showRestorePrompt(record){
+ pendingRestoreId=record.id;
+ $('restoreBubbleFolder').textContent='Last gallery: '+record.name;
+ $('restorePrompt').hidden=false;
+}
+$('restoreLast').onclick=async()=>{
+ const record=recentFolderRecords.find(r=>r.id===pendingRestoreId);
+ if(!record)return;
+ const button=$('restoreLast');
+ button.disabled=true;
+ try{
+  const opened=await openRememberedFolder(record,true);
+  if(!opened){
+   showRestorePrompt(record);
+   if(!status.textContent.startsWith('Could not')&&!status.textContent.startsWith('No gallery')){
+    status.textContent='Access not granted. Click Reopen to try again.';
+   }
+  }
+ }finally{button.disabled=false;}
+};
+$('recentFolders').onchange=async()=>{
+ const record=recentFolderRecords.find(r=>r.id===$('recentFolders').value);
+ if(record){
+  const opened=await openRememberedFolder(record,true);
+  if(!opened)showRestorePrompt(record);
+ }
+};
+
+const viewerImages=[$('viewerImage'),$('viewerImageNext')];
+let visibleImage=null,transitionTimer=null,selectedIndex=-1;
+const featuresByIndex=new Map();
+let thumbUrls=[];
+const validImage=name=>/\.jpe?g$/i.test(name);
+const dateString=value=>value?value.slice(0,10).split('-').reverse().join('.'):'Date unknown';
+function dateTimeString(value){if(!value)return 'Date and time unknown';const [day,time]=value.split(' ');return dateString(day)+(time?' '+time:'');}
+function exifDate(value){
+ if(!value)return null;
+ if(value instanceof Date){if(Number.isNaN(value.getTime()))return null;return [value.getFullYear(),String(value.getMonth()+1).padStart(2,'0'),String(value.getDate()).padStart(2,'0')].join('-')+' '+[value.getHours(),value.getMinutes(),value.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');}
+ const m=String(value).match(/^(\d{4})[:\-](\d\d)[:\-](\d\d)[ T](\d\d):(\d\d):(\d\d)/);
+ return m?`${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`:null;
+}
+// All paths in gallery.json are relative to the gallery root; retain v10 name-only records.
+function pathParts(path){
+ if(typeof path!=='string'||!path||path.includes('\\'))return null;
+ const parts=path.split('/');
+ if(parts.some(part=>!part||part==='.'||part==='..'||/[\x00-\x1f]/.test(part)))return null;
+ return parts;
+}
+function photoPath(item){return item.path||item.name;}
+function visibleItems(){return items.filter(item=>!deletedRecords.has(photoPath(item))&&!item.deleted);}
+function refreshDeleteControls(){
+ $('deletePhoto').hidden=!(location.protocol==='file:'&&directory&&viewerIndex>=0);
+}
+function folderLabel(item){const parts=pathParts(photoPath(item));return parts?.slice(0,-1).join(' / ')||'';}
+function displayDate(item){const folder=folderLabel(item);return (folder?folder+' / ':'')+dateTimeString(item.date);}
+function thumbName(name){return name;}
+function thumbnailPath(item){const parts=pathParts(photoPath(item));return 'thumbnails/'+[...parts.slice(0,-1),thumbName(parts.at(-1))].join('/');}
+function localThumbnailPath(item){const path=item.thumbnail||thumbnailPath(item);return directoryIsExport||legacyDirectoryLayout?path:EXPORT_DIRECTORY+'/'+path;}
+function urlForPath(path){return new URL(path.split('/').map(encodeURIComponent).join('/'),location.href).href;}
+async function directoryAt(root,segments,create=false){
+ let dir=root;
+ for(const part of segments)dir=await dir.getDirectoryHandle(part,create?{create:true}:undefined);
+ return dir;
+}
+async function fileAt(root,path){
+ const parts=pathParts(path);if(!parts)throw Error('Invalid path: '+path);
+ const dir=await directoryAt(root,parts.slice(0,-1));
+ return (await dir.getFileHandle(parts.at(-1))).getFile();
+}
+async function* walkPhotos(dir,prefix=''){
+ for await(const [name,handle] of dir.entries()){
+  if(handle.kind==='directory'){
+   // Thumbnails are generated by PhotoMap; never scan them as source photos.
+   if(name.toLowerCase()==='thumbnails'||name===EXPORT_DIRECTORY)continue;
+   yield* walkPhotos(handle,prefix+name+'/');
+  }else if(handle.kind==='file'&&validImage(name))yield {path:prefix+name,name,handle};
+ }
+}
+// If a thumbnail is missing locally, generate it through the same Pica worker.
+async function jpegThumb(file){
+ const {size,quality}=thumbnailSettings();
+ const pool=createJpegWorkerPool(1,size,quality);
+ try{
+  const {thumbnail}=await pool[0].encode(file,false,true);
+  if(!thumbnail)throw Error('Could not create thumbnail');
+  return thumbnail;
+ }finally{pool.forEach(worker=>worker.close());}
+}
+// Each worker decodes a source JPEG once and creates both derivatives off the UI thread.
+// Using a function's source keeps the exported index.html entirely self-contained:
+// no separate worker.js is required when the portable gallery is moved.
+function jpegWorkerMain(){
+ // Import Pica once per JPEG worker. Pica's own workers are disabled: the app
+ // already owns and limits its JPEG worker pool. mks2013 is Pica's default
+ // high-quality resize+sharpening filter.
+ let picaInstancePromise;
+ let warnedAboutPica=false;
+ async function getPica(){
+  if(!picaInstancePromise)picaInstancePromise=(async()=>{
+   importScripts('https://cdn.jsdelivr.net/npm/pica@10.0.3/dist/pica.min.js');
+   if(typeof self.pica!=='function')throw Error('Pica failed to load in JPEG worker');
+   return self.pica({features:['js','wasm']});
+  })();
+  return picaInstancePromise;
+ }
+ self.onmessage=async({data})=>{
+  const {id,file,needImage,needThumb,thumbSize,imageQuality,thumbQuality}=data;
+  let bitmap=null,canvas=null,sourceCanvas=null;
+  try{
+   bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
+   let image=null,thumbnail=null,thumbResizer=null;
+   if(needImage){
+    canvas=new OffscreenCanvas(bitmap.width,bitmap.height);
+    const ctx=canvas.getContext('2d');
+    if(!ctx)throw Error('OffscreenCanvas 2D context is unavailable');
+    ctx.drawImage(bitmap,0,0);
+    image=await canvas.convertToBlob({type:'image/jpeg',quality:imageQuality});
+    canvas.width=0;canvas.height=0;canvas=null;
+   }
+   if(needThumb){
+    const scale=Math.min(thumbSize/bitmap.width,thumbSize/bitmap.height,1);
+    const width=Math.max(1,Math.round(bitmap.width*scale));
+    const height=Math.max(1,Math.round(bitmap.height*scale));
+    canvas=new OffscreenCanvas(width,height);
+    if(scale<1){
+     // Pica accepts canvas-like pixel sources. Do not pass ImageBitmap directly:
+     // v10 can fail while creating its internal tiling canvases in a Worker.
+     try{
+      sourceCanvas=new OffscreenCanvas(bitmap.width,bitmap.height);
+      const sourceCtx=sourceCanvas.getContext('2d',{willReadFrequently:true});
+      if(!sourceCtx)throw Error('OffscreenCanvas source context is unavailable');
+      sourceCtx.drawImage(bitmap,0,0);
+      const resizer=await getPica();
+      await resizer.resize(sourceCanvas,canvas,{filter:'mks2013'});
+      thumbResizer='pica-mks2013-v2';
+     }catch(picaError){
+      // A failed resize must not discard a valid photo. Clear any partial
+      // canvas contents and use browser high-quality interpolation instead.
+      if(!warnedAboutPica){
+       console.warn('Pica resize failed; using Canvas fallback:',String(picaError));
+       warnedAboutPica=true;
+      }
+      canvas.width=width;canvas.height=height;
+      const ctx=canvas.getContext('2d');
+      if(!ctx)throw Error('OffscreenCanvas thumbnail context is unavailable');
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.drawImage(bitmap,0,0,width,height);
+      thumbResizer='canvas-high-fallback-v2';
+     }
+    }else{
+     const ctx=canvas.getContext('2d');
+     if(!ctx)throw Error('OffscreenCanvas thumbnail context is unavailable');
+     ctx.drawImage(bitmap,0,0);
+     thumbResizer='pica-mks2013-v2';
+    }
+    thumbnail=await canvas.convertToBlob({type:'image/jpeg',quality:thumbQuality});
+   }
+   self.postMessage({id,ok:true,image,thumbnail,thumbResizer});
+  }catch(e){
+   self.postMessage({id,ok:false,error:String(e?.message||e)});
+  }finally{
+   if(canvas){canvas.width=0;canvas.height=0;}
+   if(sourceCanvas){sourceCanvas.width=0;sourceCanvas.height=0;}
+   if(bitmap)bitmap.close();
+  }
+ };
+}
+function createJpegWorkerPool(count,thumbSize,thumbQuality){
+ if(!window.Worker||!window.OffscreenCanvas||!window.createImageBitmap)
+  throw Error('Web Workers, OffscreenCanvas and createImageBitmap are required (use current Chrome/Edge).');
+ const workerSource='('+jpegWorkerMain.toString()+')()';
+ const workerUrl=URL.createObjectURL(new Blob([workerSource],{type:'text/javascript'}));
+ const workers=[];
+ try{
+  for(let i=0;i<count;i++){
+   const worker=new Worker(workerUrl);
+   let sequence=0;
+   const pending=new Map();
+   worker.onmessage=({data})=>{
+    const job=pending.get(data.id);
+    if(!job)return;
+    pending.delete(data.id);
+    if(data.ok)job.resolve({image:data.image,thumbnail:data.thumbnail,thumbResizer:data.thumbResizer});
+    else job.reject(Error(data.error||'JPEG worker failed'));
+   };
+   worker.onerror=(event)=>{
+    console.error('JPEG worker error:',event.message);
+    for(const job of pending.values())job.reject(Error('JPEG worker crashed: '+event.message));
+    pending.clear();
+   };
+   workers.push({
+    worker,
+    encode(file,needImage,needThumb){
+     const id=++sequence;
+     return new Promise((resolve,reject)=>{
+      pending.set(id,{resolve,reject});
+      try{worker.postMessage({id,file,needImage,needThumb,thumbSize,imageQuality:JPEG_QUALITY,thumbQuality});}
+      catch(e){pending.delete(id);reject(e);}
+     });
+    },
+    close(){
+     worker.terminate();
+     for(const job of pending.values())job.reject(Error('JPEG worker terminated'));
+     pending.clear();
+    }
+   });
+  }
+ }catch(e){workers.forEach(w=>w.close());throw e;}
+ finally{URL.revokeObjectURL(workerUrl);}
+ return workers;
+}
+// One async runner per worker. A worker processes at most one JPEG at a time.
+// When a job completes, that worker immediately takes the next queued photo.
+async function runWithWorkers(tasks,workers,process){
+ let next=0;
+ await Promise.all(workers.map(async worker=>{
+  while(next<tasks.length){const index=next++;await process(tasks[index],worker);}
+ }));
+}
+async function jpegDataUrl(file){const blob=await jpegThumb(file);return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});}
+function clearThumbUrls(){thumbUrls.forEach(url=>URL.revokeObjectURL(url));thumbUrls=[];}
+function fit(){if(source.getFeatures().length)map.getView().fit(source.getExtent(),{padding:[65,65,65,65],maxZoom:15,duration:200});}
+// Display a selection border around the photograph itself, not a circle behind the marker.
+function markerStyle(item,isSelected){
+ const thumbMax=item.thumbMax||86;
+ return new ol.style.Style({
+  image:new ol.style.Icon({src:item.thumb,anchor:[.5,1],scale:Math.min(1,MARKER_SIZE/thumbMax)}),
+  zIndex:isSelected?10000:0
+ });
+}
+// Build a bordered icon at the same visual size as the normal map marker.
+// A canvas-backed OpenLayers icon also allows the border to follow the actual
+// thumbnail dimensions, including portrait/landscape aspect ratios.
+async function borderedMarkerStyle(item){
+ const img=new Image();
+ img.src=item.thumb;
+ await img.decode();
+ const scale=Math.min(1,MARKER_SIZE/(item.thumbMax||86));
+ const w=Math.max(1,Math.round(img.naturalWidth*scale));
+ const h=Math.max(1,Math.round(img.naturalHeight*scale));
+ const padding=7;
+ const canvas=document.createElement('canvas');
+ canvas.width=w+padding*2;canvas.height=h+padding*2;
+ const ctx=canvas.getContext('2d');
+ ctx.shadowColor='rgba(0,0,0,.65)';ctx.shadowBlur=9;
+ ctx.fillStyle='#ffcd38';
+ ctx.fillRect(padding-4,padding-4,w+8,h+8);
+ ctx.shadowColor='transparent';ctx.shadowBlur=0;
+ ctx.drawImage(img,padding,padding,w,h);
+ return new ol.style.Style({
+  image:new ol.style.Icon({
+   img:canvas,imgSize:[canvas.width,canvas.height],
+   anchor:[canvas.width/2,padding+h],anchorXUnits:'pixels',anchorYUnits:'pixels'
+  }),
+  zIndex:10000
+ });
+}
+let highlightRequest=0;
+function selectPhoto(index){
+ if(selectedIndex===index)return;
+ ++highlightRequest;
+ const old=featuresByIndex.get(selectedIndex);
+ if(old&&items[selectedIndex])old.setStyle(markerStyle(items[selectedIndex],false));
+ selectedIndex=index;
+ const current=featuresByIndex.get(index);
+ if(!current)return;
+ const item=items[index];
+ current.setStyle(markerStyle(item,true));
+ const request=highlightRequest;
+ void borderedMarkerStyle(item).then(style=>{
+  if(request===highlightRequest&&selectedIndex===index&&featuresByIndex.get(index)===current)current.setStyle(style);
+ }).catch(e=>console.warn('Could not draw thumbnail border:',e));
+}
+// Photo URLs retain the legacy #<path> format. Folder URLs use #folder=<encoded-path>.
+function folderFor(item){return photoPath(item).split('/').slice(0,-1).join('/');}
+function activePosition(index){return activeIndices.indexOf(index);}
+function adjacentIndex(index,delta){
+ if(!activeIndices.length)return -1;
+ const pos=activePosition(index);
+ return activeIndices[((pos<0?0:pos)+delta+activeIndices.length)%activeIndices.length];
+}
+function folderFromHash(){
+ const hash=location.hash.slice(1);
+ if(!hash.startsWith('folder='))return null;
+ try{return decodeURIComponent(hash.slice(7));}catch{return null;}
+}
+function rememberFolder(folder){
+ const hash='#folder='+encodeURIComponent(folder);
+ if(location.hash!==hash)history.replaceState(history.state,'',location.pathname+location.search+hash);
+}
+function photoFromHash(){
+ const hash=location.hash.slice(1);
+ if(!hash)return -1;
+ let name;
+ try{name=decodeURIComponent(hash);}catch{return -1;}
+ return items.findIndex(item=>photoPath(item)===name);
+}
+function rememberPhoto(index){
+ const item=items[index];if(!item)return;
+ const hash='#'+encodeURIComponent(photoPath(item));
+ if(location.hash!==hash)history.replaceState(history.state,'',location.pathname+location.search+hash);
+}
+function restorePhotoFromHash(){
+ const hashFolder=folderFromHash();
+ if(hashFolder!==null){
+  if(hashFolder!==activeFolder)void activateFolder(hashFolder);
+  else{closeViewer(false);clearPreview();}
+  return;
+ }
+ const index=photoFromHash();
+ if(index>=0){
+  const wantedFolder=folderFor(items[index]);
+  if(wantedFolder!==activeFolder){void activateFolder(wantedFolder,index);return;}
+  if($('viewer').classList.contains('visible'))closeViewer(false);
+  showPreview(index,false);
+ }
+}
+function clearPreview(){popup.setPosition(undefined);selectPhoto(-1);}
+function folderCounts(){
+ const counts=new Map();
+ for(const item of visibleItems()){const key=folderFor(item);counts.set(key,(counts.get(key)||0)+1);}
+ for(const [folder,info] of folderInventory){
+  // Inventory includes untouched originals; tombstoned originals are not visible.
+  const removed=[...deletedRecords.values()].filter(item=>folderFor(item)===folder).length;
+  counts.set(folder,Math.max(counts.get(folder)||0,info.count-removed));
+ }
+ return counts;
+}
+function updateFolderProgress(folder){
+ const elements=folderProgressElements.get(folder);
+ if(!elements)return;
+ const progress=folderProgress.get(folder);
+ elements.button.classList.toggle('processing',!!progress);
+ elements.button.classList.toggle('pending',scanStatusKnown&&!progress&&!scannedFolders.has(folder));
+ elements.button.dataset.scanState=progress?'processing':scanStatusKnown?(scannedFolders.has(folder)?'completed':'pending'):'completed';
+ if(!progress){
+  elements.track.hidden=true;
+  elements.label.hidden=true;
+  return;
+ }
+ const percent=progress.total?Math.min(100,Math.round(progress.done/progress.total*100)):100;
+ elements.track.hidden=false;
+ elements.label.hidden=false;
+ elements.fill.style.width=percent+'%';
+ elements.track.setAttribute('aria-valuenow',String(percent));
+ elements.label.textContent=`Processing ${progress.done}/${progress.total} (${percent}%)`;
+}
+function renderFolders(){
+ const list=$('folderList');list.replaceChildren();folderProgressElements.clear();
+ const counts=folderCounts();
+ const folders=[...counts].filter(([,count])=>count>0).sort(([a],[b])=>a.localeCompare(b,'en'));
+ for(const [folder,count] of folders){
+  const entry=document.createElement('div');entry.className='folder-entry';
+  const button=document.createElement('button');button.className='folder-btn'+(folder===activeFolder?' active':'');
+  button.style.paddingLeft=(8+Math.min(folder.split('/').length-1,4)*10)+'px';
+  const name=document.createElement('span');name.className='folder-name';name.textContent=folder?folder.split('/').at(-1):'(Root)';name.title=folder||'(Root)';
+  const number=document.createElement('span');number.className='folder-count';number.textContent=count;
+  button.append(name,number);button.title=folder||'(Root)';
+  button.onclick=()=>void activateFolder(folder,-1,true);
+  const label=document.createElement('div');label.className='folder-progress-label';label.hidden=true;
+  const track=document.createElement('div');track.className='folder-progress';track.hidden=true;
+  track.setAttribute('role','progressbar');track.setAttribute('aria-label',`Processing ${folder||'(Root)'}`);
+  track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
+  const fill=document.createElement('div');fill.className='folder-progress-fill';track.append(fill);
+  entry.append(button,label,track);list.append(entry);
+  folderProgressElements.set(folder,{button,track,fill,label});
+  updateFolderProgress(folder);
+ }
+ if(!folders.length)list.textContent='No photos';
+}
+function render(){
+ ++highlightRequest;source.clear();featuresByIndex.clear();selectedIndex=-1;popup.setPosition(undefined);
+ activeIndices=[];
+ items.forEach((item,index)=>{
+  if(item.deleted||deletedRecords.has(photoPath(item)))return;
+  if(folderFor(item)!==activeFolder||!Number.isFinite(item.lat)||!Number.isFinite(item.lon)||!item.thumb)return;
+  activeIndices.push(index);
+  const feature=new ol.Feature({geometry:new ol.geom.Point(ol.proj.fromLonLat([item.lon,item.lat])),index});
+  feature.setStyle(markerStyle(item,false));source.addFeature(feature);featuresByIndex.set(index,feature);
+ });
+ fit();map.updateSize();
+}
+// HTTP galleries use browser-cached thumbnail URLs. Local galleries create object
+// URLs only for the selected folder, rather than all 3,400+ files at once.
+async function activateFolder(folder,wantedIndex=-1,updateHash=false){
+ // A background scan may have indexed folders without touching the current map.
+ // Bring their metadata into the UI only when the user actually navigates.
+ if(scanPublished && publishedRevision!==loadedRevision && folder!==activeFolder){
+  loadedRevision=publishedRevision;
+  setItems([...scanPublished.values()],folder);
+  if(updateHash)rememberFolder(folder);
+  return;
+ }
+ if(updateHash)rememberFolder(folder);
+ if(folder===activeFolder&&activeIndices.length&&wantedIndex<0){closeViewer(false);clearPreview();renderFolders();return;}
+ const generation=++folderGeneration;
+ closeViewer(false);clearThumbUrls();activeFolder=folder;renderFolders();
+ ++highlightRequest;source.clear();featuresByIndex.clear();activeIndices=[];popup.setPosition(undefined);selectedIndex=-1;
+ const target=visibleItems().filter(item=>folderFor(item)===folder);
+ loadingFolder=true;status.textContent=`Folder ${folder||'(Root)'}: loading thumbnails (0/${target.length})…`;
+ let loaded=0;
+ for(let offset=0;offset<target.length;offset+=12){
+  await Promise.all(target.slice(offset,offset+12).map(async item=>{
+   try{
+    if(directory){
+     const path=photoPath(item);
+     let blob=pendingThumbBlobs.get(path);
+     if(!blob){
+      try{blob=await fileAt(directory,localThumbnailPath(item));}
+      catch(e){if(e.name!=='NotFoundError')console.warn('Thumbnail cache:',path,e);}
+     }
+     if(!blob){
+      // Generating only the currently displayed folder avoids decoding thousands of JPEGs upfront.
+      if(directoryIsExport)throw Error('Missing thumbnail in exported gallery: '+localThumbnailPath(item));
+      blob=await jpegThumb(await fileAt(directory,photoPath(item)));
+      pendingThumbBlobs.set(path,blob);
+      item.thumbMax=thumbnailSettings().size;
+     }
+     if(generation!==folderGeneration)return;
+     item.thumb=URL.createObjectURL(blob);
+     thumbUrls.push(item.thumb);
+    }else if(generation===folderGeneration&&(!item.thumb||item.thumb.startsWith('blob:')))item.thumb=urlForPath(item.thumbnail||thumbnailPath(item));
+   }catch(e){console.warn('Thumbnail unavailable:',photoPath(item),e);if(generation===folderGeneration)item.thumb=null;}
+   loaded++;
+  }));
+  if(generation!==folderGeneration)return;
+  status.textContent=`Folder ${folder||'(Root)'}: thumbnails ${loaded}/${target.length}`;
+  await new Promise(resolve=>setTimeout(resolve,0));
+ }
+ if(generation!==folderGeneration)return;
+ loadingFolder=false;render();renderFolders();
+ status.textContent=`${folder||'(Root)'}: ${activeIndices.length} photos. Total indexed: ${items.length}.`;
+ const hashIndex=photoFromHash();const index=wantedIndex>=0?wantedIndex:hashIndex;
+ if(index>=0&&folderFor(items[index])===folder)showPreview(index,false);
+}
+function setItems(next,preferredFolder=null){
+ closeViewer(false);clearThumbUrls();items=next.sort((a,b)=>(a.date||'').localeCompare(b.date||'')||photoPath(a).localeCompare(photoPath(b)));
+ activeIndices=[];source.clear();featuresByIndex.clear();selectedIndex=-1;popup.setPosition(undefined);
+ renderFolders();
+ const index=photoFromHash();
+ const savedFolder=folderFromHash();
+ const folder=index>=0?folderFor(items[index]):savedFolder!==null?savedFolder:preferredFolder??(folderCounts().has(activeFolder)?activeFolder:[...folderCounts().keys()].sort()[0]??'');
+ void activateFolder(folder,index);
+}
+function showPreview(index,updateHash=true){
+ if(!activeIndices.includes(index))return;
+ const feature=featuresByIndex.get(index);
+ if(!feature)return;
+ const item=items[index];
+ selectPhoto(index);
+ if(updateHash)rememberPhoto(index);
+ popupEl.replaceChildren();
+ const close=document.createElement('button');
+ close.className='popup-close';close.textContent='×';close.title='Close preview';
+ close.setAttribute('aria-label','Close preview');close.onclick=clearPreview;
+ const remove=document.createElement('button');
+ remove.className='popup-delete';remove.title='Delete from gallery';
+ remove.setAttribute('aria-label','Delete photo from gallery');
+ remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></svg>';
+ remove.onclick=()=>void deleteGalleryPhoto(index);
+ remove.hidden=location.protocol!=='file:'||!directory;
+ const label=document.createElement('div');label.className='date';label.textContent=displayDate(item);
+ const main=document.createElement('div');main.className='popup-main';
+ const previous=document.createElement('button');
+ previous.className='popup-arrow';previous.textContent='‹';previous.title='Previous photo';
+ previous.setAttribute('aria-label','Previous photo');previous.disabled=activeIndices.length<2;
+ previous.onclick=()=>showPreview(adjacentIndex(index,-1));
+ const img=document.createElement('img');img.src=item.thumb;
+ img.alt=dateTimeString(item.date);img.title='Open photo';
+ img.onclick=()=>void showViewer(index);
+ const next=document.createElement('button');
+ next.className='popup-arrow';next.textContent='›';next.title='Next photo';
+ next.setAttribute('aria-label','Next photo');next.disabled=activeIndices.length<2;
+ next.onclick=()=>showPreview(adjacentIndex(index,1));
+ main.append(previous,img,next);
+ const count=document.createElement('div');count.className='popup-count';
+ count.textContent=`${activePosition(index)+1} / ${activeIndices.length}`;
+ const footer=document.createElement('div');footer.className='popup-footer';
+ footer.append(label,count);
+ popupEl.append(close,remove,main,footer);
+ popup.setPosition(feature.getGeometry().getCoordinates());
+}
+window.addEventListener('hashchange',()=>restorePhotoFromHash());
+map.on('singleclick',evt=>{const f=map.forEachFeatureAtPixel(evt.pixel,f=>f);if(f)showPreview(f.get('index'));else clearPreview();});
+map.on('pointermove',evt=>map.getTargetElement().style.cursor=map.hasFeatureAtPixel(evt.pixel)?'pointer':'');
+function releaseViewerImage(img){
+ const url=img.dataset.blobUrl;
+ img.classList.remove('active','fading-out');
+ img.style.zIndex='';img.style.transition='';img.style.visibility='hidden';
+ img.removeAttribute('src');delete img.dataset.blobUrl;
+ if(url)URL.revokeObjectURL(url);
+}
+function cancelTransition(){
+ if(transitionTimer!==null){clearTimeout(transitionTimer);transitionTimer=null;}
+ // Keep the currently visible image. Other images remain hidden until fully decoded.
+ for(const img of viewerImages)if(img!==visibleImage)releaseViewerImage(img);
+ if(visibleImage){visibleImage.classList.remove('fading-out');visibleImage.classList.add('active');visibleImage.style.visibility='visible';visibleImage.style.zIndex='0';}
+}
+function closeViewer(returnToPreview=true){
+ const index=viewerIndex;
+ viewerRequest++;cancelTransition();viewerImages.forEach(releaseViewerImage);visibleImage=null;
+ $('viewer').classList.remove('visible');$('viewerLoading').hidden=true;$('viewerError').hidden=true;viewerIndex=-1;refreshDeleteControls();
+ if(returnToPreview&&index>=0&&items[index])showPreview(index);
+}
+async function localPhoto(item){
+ if(!directory)throw Error('Choose a folder to open full-size photos.');
+ const permission=await directory.queryPermission({mode:'read'});
+ if(permission!=='granted' && await directory.requestPermission({mode:'read'})!=='granted')throw Error('Read permission for this folder is required.');
+ // Always open the compressed photo from the portable gallery, even when
+ // the user selected the original source directory.
+ const imagePath=item.image||'images/'+photoPath(item);
+ const portablePath=directoryIsExport?imagePath:EXPORT_DIRECTORY+'/'+imagePath;
+ return fileAt(directory,portablePath);
+}
+async function showViewer(index){
+ if(!items.length)return;
+ if(!activeIndices.includes(index))return;viewerIndex=index;refreshDeleteControls();
+ // Update the highlighted map position even while the fullscreen viewer is open.
+ showPreview(index);
+ const request=++viewerRequest;cancelTransition();$('viewer').classList.add('visible');
+ $('viewerCaption').textContent=displayDate(items[index]);
+ $('viewerError').hidden=true;$('viewerLoading').hidden=false;
+ $('prev').disabled=$('next').disabled=activeIndices.length<2;
+ let url=null;
+ try{
+  if(directory){url=URL.createObjectURL(await localPhoto(items[index]));}
+  else if(location.protocol==='http:'||location.protocol==='https:'){url=urlForPath(items[index].image||photoPath(items[index]));}
+  else throw Error('Choose a folder to open full-size photos.');
+  if(request!==viewerRequest){if(url.startsWith('blob:'))URL.revokeObjectURL(url);return;}
+  // Decode off-DOM: the browser never sees an image element with a pending src.
+  const decoded=new Image();decoded.src=url;
+  await decoded.decode();
+  if(request!==viewerRequest){if(url.startsWith('blob:'))URL.revokeObjectURL(url);return;}
+  const incoming=viewerImages.find(img=>img!==visibleImage);
+  // Fully decoded image, with its own stable layer and no broken-image placeholder.
+  incoming.style.transition='none';incoming.style.visibility='hidden';incoming.classList.remove('active','fading-out');
+  incoming.src=url;
+  if(url.startsWith('blob:'))incoming.dataset.blobUrl=url;
+  await incoming.decode();
+  if(request!==viewerRequest){releaseViewerImage(incoming);return;}
+  const outgoing=visibleImage;
+  incoming.style.zIndex='1';incoming.style.visibility='visible';
+  // The next animation frame establishes opacity 0 before the fade.
+  incoming.getBoundingClientRect();
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  if(request!==viewerRequest){releaseViewerImage(incoming);return;}
+  incoming.style.transition='opacity '+FADE_MS+'ms ease';
+  incoming.classList.add('active');visibleImage=incoming;
+  if(outgoing){outgoing.style.zIndex='0';outgoing.classList.remove('active');outgoing.classList.add('fading-out');}
+  $('viewerLoading').hidden=true;
+  if(outgoing){transitionTimer=setTimeout(()=>{if(request===viewerRequest)releaseViewerImage(outgoing);transitionTimer=null;},FADE_MS+60);}
+ }catch(err){
+  if(request!==viewerRequest)return;
+  if(url?.startsWith('blob:')&&!viewerImages.some(img=>img.dataset.blobUrl===url))URL.revokeObjectURL(url);
+  const incoming=viewerImages.find(img=>img!==visibleImage);releaseViewerImage(incoming);
+  $('viewerLoading').hidden=true;$('viewerError').hidden=false;$('viewerError').textContent=err.message;
+ }
+}
+async function downloadCurrentPhoto(){
+ const index=viewerIndex;
+ if(index<0||!items[index])return;
+ const button=$('download');
+ button.disabled=true;
+ try{
+  const item=items[index];
+  const path=item.image||'images/'+photoPath(item);
+  // Always download the portable, compressed JPEG, not the original source file.
+  let url;
+  let revoke=false;
+  if(directory){
+   const file=await localPhoto(item);
+   url=URL.createObjectURL(file);
+   revoke=true;
+  }else if(location.protocol==='http:'||location.protocol==='https:'){
+   url=urlForPath(path);
+  }else{
+   throw Error('Choose a folder before downloading the photo.');
+  }
+  const link=document.createElement('a');
+  link.href=url;
+  link.download=photoPath(item).split('/').pop()||'photo.jpg';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  if(revoke)setTimeout(()=>URL.revokeObjectURL(url),60000);
+ }catch(err){
+  console.error('Download failed:',err);
+  alert('Could not download photo: '+err.message);
+ }finally{button.disabled=false;}
+}
+$('download').onclick=()=>void downloadCurrentPhoto();
+$('deletePhoto').onclick=()=>void deleteGalleryPhoto(viewerIndex);
+$('close').onclick=()=>closeViewer();viewerImages.forEach(img=>img.onclick=()=>closeViewer());
+$('prev').onclick=()=>void showViewer(adjacentIndex(viewerIndex,-1));$('next').onclick=()=>void showViewer(adjacentIndex(viewerIndex,1));
+$('viewer').onclick=e=>{if(e.target===$('viewer')||e.target===$('viewerStage'))closeViewer();};
+document.addEventListener('keydown',e=>{
+ if($('viewer').classList.contains('visible')){
+  if(e.key==='Escape')closeViewer();else if(e.key==='ArrowLeft'){e.preventDefault();void showViewer(adjacentIndex(viewerIndex,-1));}else if(e.key==='ArrowRight'){e.preventDefault();void showViewer(adjacentIndex(viewerIndex,1));}
+ }else if(selectedIndex>=0){
+  if(e.key==='Escape')clearPreview();else if(e.key==='ArrowLeft'){e.preventDefault();showPreview(adjacentIndex(selectedIndex,-1));}else if(e.key==='ArrowRight'){e.preventDefault();showPreview(adjacentIndex(selectedIndex,1));}
+ }
+});
+function normalizeRecord(record){
+ if(!record||typeof record.name!=='string'||!validImage(record.name)||record.name==='.'||record.name==='..'||record.name.includes('/')||record.name.includes('\\'))return null;
+ const path=record.path??record.name;
+ const parts=pathParts(path);
+ if(!parts||parts.at(-1)!==record.name||parts.slice(0,-1).some(p=>p.toLowerCase()==='thumbnails'||p===EXPORT_DIRECTORY))return null;
+ if(!record.deleted&&(!Number.isFinite(record.lat)||!Number.isFinite(record.lon)||Math.abs(record.lat)>90||Math.abs(record.lon)>180))return null;
+ return {name:record.name,path,deleted:record.deleted===true,lat:record.lat,lon:record.lon,date:typeof record.date==='string'?record.date:null,size:record.size,modified:record.modified,thumbMax:Number.isFinite(record.thumbMax)?record.thumbMax:86, image:typeof record.image==='string'&&pathParts(record.image)?record.image:path, thumbnail:typeof record.thumbnail==='string'&&pathParts(record.thumbnail)?record.thumbnail:null,exportSize:record.exportSize,exportModified:record.exportModified,quality:record.quality,thumbQuality:record.thumbQuality,thumbResizer:record.thumbResizer};
+}
+async function loadIndex(index,handle=null){
+ if(!index||index.version!==1||!Array.isArray(index.photos))throw Error('Invalid gallery.json (expected version: 1 and photos).');
+ setGalleryName(index.name || (handle?.name && handle.name!==EXPORT_DIRECTORY ? handle.name : ''));
+ const result=[];deletedRecords.clear();
+ for(const entry of index.photos){
+  const item=normalizeRecord(entry);if(!item)continue;
+  if(item.deleted){deletedRecords.set(photoPath(item),item);continue;}
+  // Do not open every thumbnail: URL/File handles are resolved by activateFolder.
+  if(!handle)item.thumb=urlForPath(item.thumbnail||thumbnailPath(item));
+  result.push(item);
+ }
+ setItems(result);
+}
+async function loadIndexFromDirectory(handle){
+ // An exported .photomap folder contains gallery.json at its root.
+ // The original source folder contains it under .photomap/.
+ for(const exported of [handle.name===EXPORT_DIRECTORY, false]){
+  try{
+   const base=exported?handle:await handle.getDirectoryHandle(EXPORT_DIRECTORY);
+   const file=await (await base.getFileHandle('gallery.json')).getFile();
+   directoryIsExport=exported;legacyDirectoryLayout=false;
+   await loadIndex(JSON.parse(await file.text()),handle);
+   return true;
+  }catch(e){if(e.name!=='NotFoundError')throw e;}
+ }
+ // Backwards compatibility with the v15 gallery layout.
+ try{const file=await (await handle.getFileHandle('gallery.json')).getFile();directoryIsExport=false;legacyDirectoryLayout=true;await loadIndex(JSON.parse(await file.text()),handle);return true;}
+ catch(e){if(e.name==='NotFoundError')return false;throw e;}
+}
+async function inventoryFolders(root){
+ const found=new Map();let checked=0;
+ async function walk(dir,prefix=''){
+  let direct=0;
+  for await(const [name,handle] of dir.entries()){
+   if(handle.kind==='directory'){
+    if(name.toLowerCase()==='thumbnails'||name===EXPORT_DIRECTORY)continue;
+    await walk(handle,prefix+name+'/');
+   }else if(handle.kind==='file'&&validImage(name)){direct++;checked++;}
+   if(checked&&checked%250===0){status.textContent=`Finding folders: ${checked} JPEG…`;await new Promise(r=>setTimeout(r,0));}
+  }
+  if(direct)found.set(prefix.slice(0,-1),{count:direct});
+ }
+ await walk(root);folderInventory=found;renderFolders();
+ return found;
+}
+// Index all folders. Each off-main-thread worker decodes each needed JPEG once.
+// Only one folder is processed at a time, with bounded parallel workers.
+async function scan(handle){
+ if(directoryIsExport){status.textContent='Choose the original source folder to refresh photos.';return;}
+ if(!handle){status.textContent='Choose a photo folder first.';return;}
+ const run=++scanGeneration;
+ scanReady=false;
+ scanInProgress=true;updateScanAvailability();
+ folderProgress.clear();scannedFolders.clear();scanStatusKnown=folderInventory.size>0;renderFolders();
+ $('choose').disabled=$('concurrency').disabled=$('benchmark').disabled=$('thumbSize').disabled=$('thumbQuality').disabled=true;
+ const concurrency=Math.max(1,Math.min(MAX_PARALLEL_JPEGS,Number($('concurrency').value)||1));
+ const forceReencode=$('benchmark').checked;
+ const {size:thumbSize,quality:thumbQuality}=thumbnailSettings();
+ const thumbQualityPercent=Math.round(thumbQuality*100);
+ const t0=performance.now();
+ const previous=new Map(items.map(item=>[photoPath(item),item]));
+ const published=new Map(previous); // Keep already indexed folders usable during a refresh.
+ scanPublished=published;
+ publishedRevision=loadedRevision=0;
+ const next=[];
+ let checked=0,reused=0,changed=0,withoutGps=0,errors=0;
+ let thumbCreated=0,thumbReused=0,imageCreated=0,imageReused=0;
+ let decoded=0,decodeMs=0;
+ let jpegWorkers=[];
+ try{
+  let permission=await handle.queryPermission({mode:'readwrite'});
+  if(permission!=='granted')permission=await handle.requestPermission({mode:'readwrite'});
+  if(permission!=='granted')throw Error('Write permission is required to generate the portable gallery.');
+  const exportRoot=await handle.getDirectoryHandle(EXPORT_DIRECTORY,{create:true});
+  const thumbsRoot=await exportRoot.getDirectoryHandle('thumbnails',{create:true});
+  const imagesRoot=await exportRoot.getDirectoryHandle('images',{create:true});
+  // The portable application is saved automatically; no separate Save step.
+  setGalleryName(handle.name);
+  await writeFile(exportRoot,'index.html',currentHtml());
+  const folders=await inventoryFolders(handle);
+  if(run!==scanGeneration)return;
+  scannedFolders.clear();scanStatusKnown=true;renderFolders();
+  const total=[...folders.values()].reduce((sum,folder)=>sum+folder.count,0);
+  const countFolders=folders.size;
+  jpegWorkers=createJpegWorkerPool(concurrency,thumbSize,thumbQuality);
+  let scannedFolderCount=0;
+  pendingThumbBlobs.clear();
+  // Always process exactly one folder at a time, but its photographs concurrently.
+  for(const folder of [...folders.keys()].sort((a,b)=>a.localeCompare(b))){
+   if(run!==scanGeneration)return;
+   scannedFolderCount++;
+   const folderState={done:0,total:folders.get(folder).count};
+   folderProgress.set(folder,folderState);updateFolderProgress(folder);
+   const dir=await directoryAt(handle,folder?folder.split('/'):[]);
+   const files=[];
+   for await(const [name,fileHandle] of dir.entries()){
+    if(fileHandle.kind==='file'&&validImage(name))files.push({name,fileHandle});
+   }
+   async function processEntry({name,fileHandle},worker){
+    const path=folder?folder+'/'+name:name;
+    try{
+     if(deletedRecords.has(path))return;
+     const file=await fileHandle.getFile();
+     const old=previous.get(path);
+     const unchanged=!!old&&old.size===file.size&&old.modified===file.lastModified;
+     const parts=pathParts(path);
+     const subdirs=parts.slice(0,-1);
+     const imageDir=await directoryAt(imagesRoot,subdirs,true);
+     const thumbDir=await directoryAt(thumbsRoot,subdirs,true);
+
+     let imageExists=false;
+     try{await imageDir.getFileHandle(name);imageExists=true;}
+     catch(e){if(e.name!=='NotFoundError')throw e;}
+     const imageFresh=unchanged&&old.exportSize===file.size&&old.exportModified===file.lastModified&&old.quality===60&&imageExists;
+
+     let item;
+     if(unchanged){item={...old,thumb:undefined};reused++;}
+     else{
+      let gps=null;
+      try{gps=await exifr.gps(file);}catch(e){console.warn('GPS metadata:',path,e);}
+      if(gps&&Number.isFinite(gps.latitude)&&Number.isFinite(gps.longitude)&&Math.abs(gps.latitude)<=90&&Math.abs(gps.longitude)<=180){
+       let date=null;
+       try{const exif=await exifr.parse(file);date=exifDate(exif?.DateTimeOriginal||exif?.CreateDate||exif?.ModifyDate||exif?.DateTime);}
+       catch(e){console.warn('EXIF date:',path,e);}
+       item={name,path,lat:gps.latitude,lon:gps.longitude,date,thumbMax:0,size:file.size,modified:file.lastModified};
+       changed++;
+      }
+     }
+
+     let thumbFresh=true;
+     if(item){
+      let thumbExists=false;
+      try{await thumbDir.getFileHandle(name);thumbExists=true;}
+      catch(e){if(e.name!=='NotFoundError')throw e;}
+      thumbFresh=unchanged&&item.thumbMax>=thumbSize&&item.thumbQuality===thumbQualityPercent&&(item.thumbResizer===THUMB_RESIZER||item.thumbResizer===THUMB_RESIZER_FALLBACK)&&thumbExists;
+     }
+     const needImage=forceReencode||!imageFresh;
+     const needThumb=!!item&&(forceReencode||!thumbFresh);
+     let generatedThumbResizer=null;
+     if(needImage||needThumb){
+      const started=performance.now();
+      const {image,thumbnail,thumbResizer}=await worker.encode(file,needImage,needThumb);
+      generatedThumbResizer=thumbResizer;
+      decodeMs+=performance.now()-started; decoded++;
+      // Save the returned Blobs immediately; they are not retained by the pool.
+      if(image){await writeFile(imageDir,name,image);imageCreated++;}
+      if(thumbnail){await writeFile(thumbDir,name,thumbnail);thumbCreated++;}
+     }
+     if(!needImage)imageReused++;
+     if(!item){withoutGps++;return;}
+     if(!needThumb)thumbReused++;
+     item.thumbMax=thumbSize;
+     item.thumbQuality=thumbQualityPercent;
+     item.thumbResizer=needThumb?(generatedThumbResizer||THUMB_RESIZER):item.thumbResizer;
+     item.thumbnail=thumbnailPath(item);
+     item.image='images/'+path;
+     item.exportSize=file.size;
+     item.exportModified=file.lastModified;
+     item.quality=60;
+     next.push(item);
+    }catch(e){errors++;console.warn('Processing failed:',path,e);}
+    finally{
+     checked++;folderState.done++;
+     updateFolderProgress(folder);
+     if(checked%5===0||checked===total){
+      const elapsed=(performance.now()-t0)/1000;
+      status.textContent=`Processing (${concurrency} workers${forceReencode?', re-encode':''}): ${checked}/${total} JPEG, ${scannedFolderCount}/${countFolders} folders, ${imageCreated} images and ${thumbCreated} thumbnails written, ${errors} errors; ${elapsed.toFixed(1)}s (${(checked/Math.max(elapsed,.001)).toFixed(1)} files/s)…`;
+     }
+    }
+   }
+   await runWithWorkers(files,jpegWorkers,processEntry);
+   if(run!==scanGeneration)return;
+   // Publish results immediately after finishing this folder instead of waiting
+   // for all 3,400+ JPEGs. Unprocessed folders retain their previous index.
+   for(const path of published.keys()){
+    const parts=path.split('/');
+    if(parts.slice(0,-1).join('/')===folder)published.delete(path);
+   }
+   for(const item of next){
+    if(folderFor(item)===folder&&!deletedRecords.has(photoPath(item)))published.set(photoPath(item),item);
+   }
+   publishedRevision++;
+   if(folder===activeFolder){
+    // Only the displayed folder needs its map rebuilt. Other folder results
+    // are ready for selection without disturbing the open preview/map view.
+    loadedRevision=publishedRevision;
+    setItems([...published.values()],activeFolder);
+   }else{
+    renderFolders();
+   }
+   // Commit the gallery index after each completed folder, so interrupted scans are recoverable.
+   await writeGalleryIndex(exportRoot,[...published.values()]);
+   scannedFolders.add(folder);folderProgress.delete(folder);updateFolderProgress(folder);
+   // Give OpenLayers a chance to render the updated folder status.
+   await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(run!==scanGeneration)return;
+  loadedRevision=++publishedRevision;
+  setItems(next.filter(item=>!deletedRecords.has(photoPath(item))),activeFolder);
+  await writeGalleryIndex(exportRoot,next);
+  scanReady=errors===0;
+  const elapsed=(performance.now()-t0)/1000;
+  const summary=`Processing complete (${concurrency} workers${forceReencode?', re-encode':''}): ${checked} JPEG in ${countFolders} folders; ${elapsed.toFixed(1)}s, ${(checked/Math.max(elapsed,.001)).toFixed(2)} files/s; ${decoded} JPEG encodings (${(decodeMs/1000).toFixed(1)}s summed); ${next.length} mapped, ${withoutGps} without GPS. Images: ${imageCreated} written, ${imageReused} reused; thumbnails: ${thumbCreated} written, ${thumbReused} reused; ${errors} errors.`;
+  console.info('[PhotoMap worker benchmark]',{mode:'web-workers+pica-mks2013',concurrency,forceReencode,elapsedSeconds:elapsed,files:checked,filesPerSecond:checked/elapsed,encodedPhotos:decoded,encodeElapsedSumSeconds:decodeMs/1000,imagesCreated:imageCreated,thumbnailsCreated:thumbCreated,errors});
+  console.info('[PhotoMap]',summary+(errors?' Some photos failed; the completed gallery index was saved.':' Gallery saved automatically.'));
+  status.textContent=errors?`${errors} photo(s) failed to process. See the console for details.`:'';
+ }catch(e){scanReady=false;status.textContent='Scan failed: '+e.message;console.error(e);}
+ finally{jpegWorkers.forEach(worker=>worker.close());if(run===scanGeneration){scanPublished=null;folderProgress.clear();renderFolders();$('choose').disabled=$('concurrency').disabled=$('benchmark').disabled=$('thumbSize').disabled=$('thumbQuality').disabled=false;scanInProgress=false;updateScanAvailability();}}
+}
+$('choose').onclick=async()=>{
+ $('chooseBubble').hidden=true;
+ if(!window.showDirectoryPicker){status.textContent='Choose folder requires Chrome/Edge (HTTPS or localhost).';return;}
+ try{
+  // Read access is sufficient to open an exported .photomap gallery.
+  // Scan requests write permission separately when editing source folders.
+  const handle=await showDirectoryPicker({mode:'read'});
+  if(await handle.queryPermission({mode:'read'})!=='granted'&&await handle.requestPermission({mode:'read'})!=='granted')return;
+  scanGeneration++;scanReady=false;folderProgress.clear();scanStatusKnown=false;directory=handle;directoryIsExport=false;legacyDirectoryLayout=false;folderInventory=new Map();scannedFolders.clear();
+  if(!await loadIndexFromDirectory(handle)){setGalleryName(handle.name);setItems([]);}
+  await rememberLocalDirectory(handle);
+  updateScanAvailability();
+  if(!directoryIsExport)await scan(handle);
+  else status.textContent+=` Exported gallery “${handle.name}” loaded.`;
+ }catch(e){if(e.name!=='AbortError')status.textContent='Could not open folder: '+e.message;}
+ finally{updateScanAvailability();}
+};
+$('scan').onclick=()=>void scan(directory);
+async function writeFile(dir,name,data){const handle=await dir.getFileHandle(name,{create:true});const stream=await handle.createWritable();try{await stream.write(data);await stream.close();}catch(e){await stream.abort().catch(()=>{});throw e;}}
+async function thumbBlob(item){
+ if(pendingThumbBlobs.has(photoPath(item)))return pendingThumbBlobs.get(photoPath(item));
+ if(item.thumb?.startsWith('data:')||item.thumb?.startsWith('blob:')){const response=await fetch(item.thumb);return response.blob();}
+ if(directory){try{return await fileAt(directory,localThumbnailPath(item));}catch{}}
+ const response=await fetch(item.thumb||urlForPath(item.thumbnail||thumbnailPath(item)));if(!response.ok)throw Error('Thumbnail unavailable: '+item.name);return response.blob();
+}
+function currentHtml(){
+ const clone=document.documentElement.cloneNode(true);
+ // Clean OpenLayers-generated DOM before writing a standalone HTML application.
+ clone.querySelector('#map').replaceChildren();clone.querySelector('#folderList').replaceChildren();
+ clone.querySelector('#status').textContent='Loading gallery…';
+ clone.querySelector('body').classList.remove('http-mode','local-mode','controls-collapsed');
+ clone.querySelector('#chooseBubble').setAttribute('hidden','');
+ clone.querySelector('#viewer').classList.remove('visible');
+ for(const img of clone.querySelectorAll('.viewer-photo')){img.removeAttribute('src');img.classList.remove('active','fading-out');img.removeAttribute('style');img.removeAttribute('data-blob-url');}
+ clone.querySelector('#viewerLoading').setAttribute('hidden','');
+ clone.querySelector('#viewerError').setAttribute('hidden','');
+ // Preserve the chosen thumbnail settings in the portable HTML's default controls.
+ for(const id of ['thumbSize','thumbQuality']){
+  const current=$(id).value;
+  for(const option of clone.querySelectorAll('#'+id+' option')){
+   if(option.value===current)option.setAttribute('selected','');
+   else option.removeAttribute('selected');
+  }
+ }
+ return '<!doctype html>\n'+clone.outerHTML;
+}
+function galleryRecord(item){
+ return {
+  deleted:item.deleted===true,
+  name:item.name,path:photoPath(item),lat:item.lat,lon:item.lon,date:item.date,
+  size:item.size,modified:item.modified,thumbMax:item.thumbMax,
+  image:item.image||'images/'+photoPath(item),
+  thumbnail:item.thumbnail||thumbnailPath(item),
+  exportSize:item.exportSize,exportModified:item.exportModified,
+  quality:item.quality,thumbQuality:item.thumbQuality,thumbResizer:item.thumbResizer
+ };
+}
+async function writeGalleryIndex(exportRoot,photos){
+ // Queue all writes, including deletion commits, to avoid concurrent overwrites.
+ const run=async()=>{
+  const indexed=new Map(photos.map(item=>[photoPath(item),item]));
+  for(const [path,item] of deletedRecords)indexed.set(path,{...item,deleted:true});
+  await writeFile(exportRoot,'gallery.json',JSON.stringify({version:1,name:galleryName,photos:[...indexed.values()].map(galleryRecord)},null,2));
+ };
+ const result=indexWriteQueue.catch(()=>{}).then(run);
+ indexWriteQueue=result;
+ return result;
+}
+// Delete only portable derivatives. Source JPEGs are never opened for deletion.
+async function deletePortableCopy(exportRoot,subdirectory,item){
+ const parts=pathParts(photoPath(item));
+ if(!parts)throw Error('Invalid photo path');
+ try{
+  const root=await exportRoot.getDirectoryHandle(subdirectory);
+  const parent=await directoryAt(root,parts.slice(0,-1));
+  await parent.removeEntry(parts.at(-1));
+ }catch(e){if(e.name!=='NotFoundError')throw e;}
+}
+async function deleteGalleryPhoto(index){
+ if(deleteInProgress||location.protocol!=='file:'||!directory||index<0||!items[index])return;
+ const item=items[index],path=photoPath(item);
+ if(!confirm(`Remove “${path}” from this gallery?\nThe original JPEG will not be deleted.`))return;
+ deleteInProgress=true;
+ $('deletePhoto').disabled=true;
+ try{
+  // Permission requests must happen in response to the actual user click.
+  let permission=await directory.queryPermission({mode:'readwrite'});
+  if(permission!=='granted')permission=await directory.requestPermission({mode:'readwrite'});
+  if(permission!=='granted')throw Error('Write access is required to remove gallery images.');
+  const exportRoot=directoryIsExport||legacyDirectoryLayout?directory:await directory.getDirectoryHandle(EXPORT_DIRECTORY);
+  // Mark the photo deleted in gallery.json BEFORE removing any files.
+  deletedRecords.set(path,{...item,deleted:true,thumb:undefined});
+  if(scanPublished){scanPublished.delete(path);publishedRevision++;}
+  try{await writeGalleryIndex(exportRoot,items.filter(i=>photoPath(i)!==path));}
+  catch(e){deletedRecords.delete(path);throw e;}
+  const pos=activeIndices.indexOf(index);
+  const nextIndex=activeIndices.length>1?activeIndices[(pos+1)%activeIndices.length]:-1;
+  const nextPath=nextIndex>=0?photoPath(items[nextIndex]):null;
+  const folder=activeFolder;
+  closeViewer(false);
+  if(nextPath)rememberPhoto(nextIndex);else rememberFolder(folder);
+  setItems(items.filter(i=>photoPath(i)!==path),folder);
+  // A deletion may overlap a scan of the same folder; its tombstone takes precedence.
+  const cleanup=await Promise.allSettled([
+   deletePortableCopy(exportRoot,'images',item),
+   deletePortableCopy(exportRoot,'thumbnails',item)
+  ]);
+  const failures=cleanup.filter(r=>r.status==='rejected');
+  if(failures.length){
+   console.warn('Photo removed from index, but some exported files could not be deleted:',path,failures);
+   status.textContent='Photo removed from gallery; some exported files could not be deleted (see console).';
+  }
+ }catch(e){console.error('Could not remove photo:',path,e);alert('Could not remove photo: '+e.message);}
+ finally{deleteInProgress=false;$('deletePhoto').disabled=false;refreshDeleteControls();}
+}
+
+async function init(){
+ // HTTP(S): gallery.json alongside index.html is authoritative. No IndexedDB.
+ if(location.protocol==='http:'||location.protocol==='https:'){
+  try{
+   const response=await fetch(new URL('gallery.json',location.href),{cache:'no-cache'});
+   if(response.status===404){
+    // First launch: no gallery has been generated yet.
+    status.textContent='';
+    $('chooseBubble').hidden=false;
+    updateScanAvailability();
+    return;
+   }
+   if(!response.ok)throw Error('HTTP '+response.status);
+   directory=null;directoryIsExport=true;legacyDirectoryLayout=false;updateScanAvailability();
+   await loadIndex(await response.json());
+   setControlsCollapsed(true);
+   $('chooseBubble').hidden=true;
+   return;
+  }catch(e){
+   console.warn('Could not load gallery.json:',e);
+   status.textContent='Could not load gallery.json: '+e.message;
+   return;
+  }
+ }
+ if(location.protocol==='file:'){
+  await initLocalFolderHistory();
+  return;
+ }
+ status.textContent='Choose a gallery folder to open gallery.json.';
+}
+void init();
+</script>
+</body>
+</html>
