@@ -1,171 +1,69 @@
-# Photo Map Generator
+# Photo Map
 
-**[English version / Английская версия](README_EN.md)**
+Interactive map for displaying geolocated photos using OpenLayers.
 
-Интерактивная карта для отображения фотографий с GPS-координатами на основе OpenLayers.
+## Features
 
-## Описание
+- 📍  Automatic GPS coordinate extraction from photo EXIF data
+- 🖼️ Photo thumbnails as map markers
+- 🔍  Full-size images in popups on click
+- 🗑️ Photo deletion feature
+- ⚡  Optimized loading with automatic thumbnail generation
+- 🗺️ Automatic map centering on all photos
 
-Этот проект создает интерактивную веб-карту, где каждая фотография с GPS-данными отображается как маркер с миниатюрой изображения. При клике на маркер открывается попап с полноразмерным изображением.
+## Installation
 
-## Возможности
+1. Download `index.html` from the repo.
+2. Open it in a browser locally.
 
-- 📍 Автоматическое извлечение GPS-координат из EXIF-данных фотографий
-- 🖼️ Миниатюры фотографий как маркеры на карте
-- 🔍 Полноразмерные изображения в попапах при клике
-- 🗑️ Опциональная функция удаления фотографий (режим редактирования)
-- ⚡ Оптимизированная загрузка с автоматическим созданием миниатюр
-- 🗺️ Автоматическое центрирование карты по всем фотографиям
 
-## Установка
+## Usage
 
-1. Убедитесь, что у вас установлен Python 3.6+
-2. Установите необходимые зависимости:
-```bash
-pip install pillow
-```
+1. Choose a folder with your photos. For a better performance it is recommended to have files 
+   organized via subfolders. 
+2. Wait until the indexing and enjoy the gallery.
 
-3. Создайте папку `image_source` и поместите туда ваши JPEG-фотографии с GPS-данными:
-```
-photomap/
-├── image_source/
-│   ├── photo1.jpeg
-│   ├── photo2.jpeg
-│   └── ...
-├── photomap_openlayers.py
-├── photo_server.py
-└── README.md
-```
 
-## Использование
+## File Structure and Static Publishing
 
-### Режим просмотра (по умолчанию)
-
-Создает карту только для просмотра фотографий без возможности удаления:
-
-```bash
-python photomap_openlayers.py
-```
-
-**Результат:**
-- Создается файл `photo_map_openlayers.html`
-- Карта готова для публикации или локального просмотра
-- Открывается напрямую в браузере
-
-### Режим редактирования
-
-Создает карту с возможностью удаления фотографий:
-
-```bash
-python photomap_openlayers.py --delete
-```
-
-**Результат:**
-- Создается файл `photo_map_openlayers_edit.html`
-- В попапах появляется кнопка "Удалить фото"
-- Требует запуска веб-сервера для работы функции удаления
-
-## Режим редактирования с веб-сервером
-
-Для использования функции удаления фотографий:
-
-1. **Создайте карту в режиме редактирования:**
-```bash
-python photomap_openlayers.py --delete
-```
-
-2. **Запустите веб-сервер:**
-```bash
-python photo_server.py
-```
-
-3. **Откройте браузер и перейдите по адресу:**
-```
-http://localhost:8000/photo_map_openlayers_edit.html
-```
-
-4. **Используйте функции:**
-   - Кликните на любую фотографию для просмотра
-   - Нажмите "Удалить фото" для удаления исходного файла
-   - Маркер исчезнет с карты без перезагрузки страницы
-
-## Структура файлов
+Once a gallery is generated you can publish it into any webhosting just by copying the `.photomap/` folder.
+All the photos are resized and thumnails are generated. `index.html` is provided.
 
 ```
-photomap/
-├── image_source/              # Исходные фотографии
-│   ├── *.jpeg                # JPEG файлы с GPS данными
-│   └── thumbs/               # Автоматически созданные миниатюры
+.photomap/
+├── images/                   # Resized photos
+│   └── *.jpeg                # JPEG files with GPS data
+├───thumbnails/               # Auto-generated thumbnails
 │       └── *.jpeg
-├── photomap_openlayers.py    # Основной скрипт генерации карты
-├── photo_server.py           # Веб-сервер для режима редактирования
-├── photo_map_openlayers.html      # Карта для просмотра
-├── photo_map_openlayers_edit.html # Карта для редактирования
+├── index.html                # Main gallery all-included file
+├── gallery.json              # The gallery generated index required for this particular gallery.
 └── README.md
 ```
 
-## Публикация карты
+## Technical Details
 
-### Статичная публикация (только просмотр)
+- **Image Format:** Only JPEG files supported
+- **GPS Data:** Automatic extraction from EXIF
+- **Thumbnails:** Created automatically
+- **Map Base:** OpenStreetMap via OpenLayers
+- **Compatibility:** Modern browsers with ES6 support
 
-1. Создайте карту в режиме просмотра:
-```bash
-python photomap_openlayers.py
-```
+## Security
 
-2. Файл `photo_map_openlayers.html` готов для публикации:
-   - Загрузите на любой веб-хостинг
-   - Откройте локально в браузере
-   - Все изображения встроены в HTML (base64)
-   - Не требует дополнительного сервера
+- You need to allow the app to access your local folder with photos
 
-### Интерактивная публикация (с удалением)
+## Troubleshooting
 
-1. Создайте карту в режиме редактирования:
-```bash
-python photomap_openlayers.py --delete
-```
+**Slow map loading:**
+- Organize photos in subfolders
 
-2. Разверните на сервере с поддержкой Python:
-   - Загрузите все файлы проекта
-   - Запустите `photo_server.py` на сервере
-   - Настройте веб-сервер (nginx/apache) для проксирования
+## Use Cases
 
-## Технические особенности
+- 📸 **Travel Photo Albums** - show your trip route
+- 🏡 **Property Documentation** - real estate or project mapping
+- 🌿 **Scientific Research** - geotagged observations
+- 👥 **Family Archives** - history of family event locations
 
-- **Формат изображений:** Поддерживаются только JPEG файлы
-- **GPS-данные:** Автоматическое извлечение из EXIF
-- **Миниатюры:** Создаются автоматически (50x65 пикселей)
-- **Картографическая основа:** OpenStreetMap через OpenLayers
-- **Совместимость:** Современные браузеры с поддержкой ES6
+## License
 
-## Безопасность
-
-- Сервер проверяет пути файлов для предотвращения доступа за пределы `image_source/`
-- Удаление требует подтверждения пользователя
-- При удалении файла также удаляется соответствующая миниатюра
-
-## Устранение неполадок
-
-**Фотографии не отображаются на карте:**
-- Убедитесь, что файлы имеют расширение `.jpeg`
-- Проверьте наличие GPS-данных в EXIF (многие редакторы их удаляют)
-
-**Кнопка удаления не работает:**
-- Проверьте, что запущен `photo_server.py`
-- Убедитесь, что открываете карту через `http://localhost:8000/`
-
-**Медленная загрузка карты:**
-- Уменьшите количество фотографий
-- Миниатюры создаются автоматически для оптимизации
-
-## Примеры использования
-
-- 📸 **Фотоальбомы путешествий** - покажите маршрут поездки
-- 🏡 **Документация объектов** - карта недвижимости или проектов
-- 🌿 **Научные исследования** - геопривязка наблюдений
-- 👥 **Семейные архивы** - история мест семейных событий
-
-## Лицензия
-
-Свободное использование. Основано на открытых технологиях: OpenLayers, OpenStreetMap.
+MIT
