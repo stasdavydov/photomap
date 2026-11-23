@@ -51,7 +51,6 @@ button:hover{background:#f0f0f0}button:disabled{opacity:.5;cursor:wait}
 .folder-progress-fill{height:100%;width:0;background:#3984e6;border-radius:inherit;transition:width .12s ease}
 .folder-progress-label{padding:0 9px 4px;font-size:11px;color:#526477;font-variant-numeric:tabular-nums}
 .folder-progress[hidden],.folder-progress-label[hidden]{display:none}
-#folderHint{font-size:12px;color:#666;padding:10px;border-top:1px solid #ddd}
 
 .popup{background:white;border-radius:10px;padding:10px;box-shadow:0 4px 18px #0005;text-align:center;min-width:120px}
 .popup img{display:block;max-width:320px;max-height:320px;object-fit:contain;cursor:zoom-in;margin:auto}
@@ -72,6 +71,7 @@ button:hover{background:#f0f0f0}button:disabled{opacity:.5;cursor:wait}
 #viewerStage .viewer-photo.fading-out{opacity:0;visibility:visible;pointer-events:none}
 @media(prefers-reduced-motion:reduce){#viewerStage .viewer-photo{transition:none}}
 #viewerCaption{position:absolute;bottom:12px;left:62px;right:62px;text-align:center;pointer-events:none}
+#viewerCount{font-size:12px;color:#ccc;margin-top:4px;font-variant-numeric:tabular-nums}
 #viewerLoading{z-index:1;position:absolute;inset:0;display:flex;justify-content:center;align-items:center;pointer-events:none;background:#0003}
 #viewerLoading[hidden],#viewerError[hidden]{display:none}
 .spinner{width:48px;height:48px;border-radius:50%;border:5px solid #ffffff57;border-top-color:#fff;animation:spin .8s linear infinite;filter:drop-shadow(0 2px 5px #0008)}
@@ -90,11 +90,9 @@ button:hover{background:#f0f0f0}button:disabled{opacity:.5;cursor:wait}
 .popup-delete:hover{background:#ffebeb}
 #deletePhoto[hidden],.popup-delete[hidden]{display:none!important}
 body:not(.local-mode) #deletePhoto{display:none}
-#controlsToggle{display:none;flex:none;width:36px;height:36px;padding:7px;background:#fff;box-shadow:none;border:1px solid #bbb;border-radius:6px}
-#controlsToggle svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
-body.http-mode #controlsToggle{display:flex;align-items:center;justify-content:center}
-body.controls-collapsed header{display:none}
-body.controls-collapsed{grid-template-rows:0 minmax(0,1fr)}
+/* HTTP(S) galleries have no editing toolbar; keep all viewport height for the map. */
+body.http-mode header{display:none}
+body.http-mode{grid-template-rows:0 minmax(0,1fr)}
 #galleryTitle{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
 </style>
 </head>
@@ -111,10 +109,10 @@ body.controls-collapsed{grid-template-rows:0 minmax(0,1fr)}
   <div id="restoreBubble" role="note"><strong id="restoreBubbleFolder"></strong><span>Click Reopen to grant access to the last gallery.</span></div>
 </div>
 <button id="scan" disabled title="Select a source folder to scan all subfolders, generate thumbnails and compressed JPEG copies">Refresh all photos</button>
-<label for="concurrency">Parallel JPEGs</label><select id="concurrency" title="Number of JPEG Web Workers"></select><label for="thumbSize">Thumbnail size</label><select id="thumbSize" title="Thumbnail longest side in pixels"><option value="258">258 px</option><option value="320">320 px</option><option value="384" selected>384 px</option><option value="512">512 px</option></select><label for="thumbQuality">JPEG quality</label><select id="thumbQuality" title="Thumbnail JPEG encoding quality"><option value="30">30%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="60">60%</option><option value="70">70%</option><option value="80">80%</option></select><label for="benchmark"><input type="checkbox" id="benchmark"> Re-encode (benchmark)</label>
+<label for="concurrency">Parallel JPEGs</label><select id="concurrency" title="Number of JPEG Web Workers"></select><label for="thumbSize">Thumbnail size</label><select id="thumbSize" title="Thumbnail longest side in pixels"><option value="258">258 px</option><option value="320" selected>320 px</option><option value="384">384 px</option><option value="512">512 px</option></select><label for="thumbQuality">JPEG quality</label><select id="thumbQuality" title="Thumbnail JPEG encoding quality"><option value="30">30%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="60">60%</option><option value="70">70%</option><option value="80">80%</option></select><label for="benchmark"><input type="checkbox" id="benchmark"> Re-encode (benchmark)</label>
 <span id="status" role="status">Loading gallery…</span>
 </header>
-<div id="workspace"><div id="map"></div><aside id="folders" aria-label="Photo folders"><div id="folderTitle"><span id="folderTitleLabel">Folders</span><button id="controlsToggle" type="button" aria-label="Hide controls" aria-expanded="true" title="Hide controls"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg></button></div><nav id="folderList" aria-label="Choose folder"></nav><div id="folderHint">All folders are indexed; only the selected folder is rendered</div></aside></div>
+<div id="workspace"><div id="map"></div><aside id="folders" aria-label="Photo folders"><div id="folderTitle"><span id="folderTitleLabel">Folders</span></div><nav id="folderList" aria-label="Choose folder"></nav></aside></div>
 <div id="viewer" role="dialog" aria-modal="true" aria-label="Photo viewer">
 <button class="vbtn" id="download" aria-label="Download photo" title="Download photo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button>
 <button class="vbtn" id="deletePhoto" aria-label="Delete photo from gallery" title="Delete photo from gallery"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></svg></button>
@@ -126,7 +124,7 @@ body.controls-collapsed{grid-template-rows:0 minmax(0,1fr)}
   <div id="viewerError" hidden></div>
 </div>
 <button class="vbtn next" id="next" aria-label="Next photo" title="Next photo">›</button>
-<div id="viewerCaption"></div>
+<div id="viewerCaption"><div id="viewerDate"></div><div id="viewerCount"></div></div>
 </div>
 <script>
 'use strict';
@@ -135,22 +133,6 @@ const status=$('status');
 const isHttp=location.protocol==='http:'||location.protocol==='https:';
 if(isHttp)document.body.classList.add('http-mode');
 else if(location.protocol==='file:')document.body.classList.add('local-mode');
-function toggleControls(){
- const collapsed=document.body.classList.toggle('controls-collapsed');
- $('controlsToggle').setAttribute('aria-expanded',String(!collapsed));
- $('controlsToggle').setAttribute('aria-label',collapsed?'Show controls':'Hide controls');
- $('controlsToggle').title=collapsed?'Show controls':'Hide controls';
- requestAnimationFrame(()=>map.updateSize());
-}
-$('controlsToggle').onclick=toggleControls;
-function setControlsCollapsed(collapsed){
- document.body.classList.toggle('controls-collapsed',collapsed);
- $('controlsToggle').setAttribute('aria-expanded',String(!collapsed));
- $('controlsToggle').setAttribute('aria-label',collapsed?'Show controls':'Hide controls');
- $('controlsToggle').title=collapsed?'Show controls':'Hide controls';
- requestAnimationFrame(()=>map.updateSize());
-}
-
 let galleryName='';
 function setGalleryName(name){
  galleryName=typeof name==='string'?name.trim():'';
@@ -221,7 +203,7 @@ let scanReady=false;
 let scanStatusKnown=false; // true when inventory has established which folders require processing
 // Only thumbnails for the selected folder are retained as object URLs; all are pre-generated on disk.
 
-const DEFAULT_THUMB_SIZE=384,DEFAULT_THUMB_QUALITY=.50;
+const DEFAULT_THUMB_SIZE=320,DEFAULT_THUMB_QUALITY=.50;
 // Pica 10.0.3 runs in the existing JPEG Web Workers (no nested Pica worker pool).
 const THUMB_RESIZER='pica-mks2013-v2';
 const THUMB_RESIZER_FALLBACK='canvas-high-fallback-v2';
@@ -231,8 +213,8 @@ function thumbnailSettings(){
  return {size:Math.max(1,Number($('thumbSize').value)||DEFAULT_THUMB_SIZE), quality:(Number($('thumbQuality').value)||50)/100};
 }
 // Set the maximum parallel JPEG processing tasks here.
-const MAX_PARALLEL_JPEGS = 4;
-const DEFAULT_PARALLEL_JPEGS = 3;
+const MAX_PARALLEL_JPEGS = 5;
+const DEFAULT_PARALLEL_JPEGS = 5;
 function setupConcurrencyOptions(){
  const select=$('concurrency');
  select.replaceChildren();
@@ -925,7 +907,8 @@ async function showViewer(index){
  // Update the highlighted map position even while the fullscreen viewer is open.
  showPreview(index);
  const request=++viewerRequest;cancelTransition();$('viewer').classList.add('visible');
- $('viewerCaption').textContent=displayDate(items[index]);
+ $('viewerDate').textContent=displayDate(items[index]);
+ $('viewerCount').textContent=`${activePosition(index)+1} / ${activeIndices.length}`;
  $('viewerError').hidden=true;$('viewerLoading').hidden=false;
  $('prev').disabled=$('next').disabled=activeIndices.length<2;
  let url=null;
@@ -1254,7 +1237,7 @@ function currentHtml(){
  // Clean OpenLayers-generated DOM before writing a standalone HTML application.
  clone.querySelector('#map').replaceChildren();clone.querySelector('#folderList').replaceChildren();
  clone.querySelector('#status').textContent='Loading gallery…';
- clone.querySelector('body').classList.remove('http-mode','local-mode','controls-collapsed');
+ clone.querySelector('body').classList.remove('http-mode','local-mode');
  clone.querySelector('#chooseBubble').setAttribute('hidden','');
  clone.querySelector('#viewer').classList.remove('visible');
  for(const img of clone.querySelectorAll('.viewer-photo')){img.removeAttribute('src');img.classList.remove('active','fading-out');img.removeAttribute('style');img.removeAttribute('data-blob-url');}
@@ -1355,7 +1338,6 @@ async function init(){
    if(!response.ok)throw Error('HTTP '+response.status);
    directory=null;directoryIsExport=true;legacyDirectoryLayout=false;updateScanAvailability();
    await loadIndex(await response.json());
-   setControlsCollapsed(true);
    $('chooseBubble').hidden=true;
    return;
   }catch(e){
